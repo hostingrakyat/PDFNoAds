@@ -32,22 +32,42 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Accept Android SDK licenses
+        run: yes | flutter doctor --android-licenses 2>/dev/null || true
+
+      - name: Flutter doctor (diagnostics)
+        run: flutter doctor -v
+
       - name: Flutter pub get
         run: flutter pub get
 
       - name: Create local.properties
         run: |
-          echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" > android/local.properties
+          FLUTTER_SDK=$(which flutter | sed 's|/bin/flutter||')
+          echo "flutter.sdk=$FLUTTER_SDK" > android/local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
+          echo "--- local.properties ---"
           cat android/local.properties
+          echo "--- Flutter SDK exists ---"
+          ls "$FLUTTER_SDK/packages/flutter_tools/gradle/" | head -10
 
-      - name: Build release APK
-        run: flutter build apk --release --no-pub
+      - name: Build release APK (verbose)
+        run: |
+          flutter build apk --release --no-pub --verbose 2>&1 | tee /tmp/build.log
+          EXIT=${PIPESTATUS[0]}
+          if [ $EXIT -ne 0 ]; then
+            echo "========== BUILD FAILED — last 150 lines =========="
+            grep -E "error:|Error:|FAILURE|Exception|> Task|Caused by:" /tmp/build.log | tail -50
+            echo "============================================"
+            tail -80 /tmp/build.log
+            exit $EXIT
+          fi
 
       - name: Rename APK
         run: |
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk dist/PDFNoAds-v1.0.0.apk
+          ls -lh dist/
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
@@ -55,6 +75,14 @@ jobs:
           name: PDFNoAds-APK
           path: dist/PDFNoAds-v1.0.0.apk
           retention-days: 90
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/build.log
+          retention-days: 7
 
       - name: Delete existing release if present
         run: |
@@ -93,4 +121,3 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-# Build trigger Thu May 21 10:16:03 UTC 2026
