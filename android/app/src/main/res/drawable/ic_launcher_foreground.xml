@@ -5,41 +5,43 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Document body -->
+    <!-- Document body (white) -->
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M28,18 L68,18 L80,30 L80,90 L28,90 Z"/>
 
-    <!-- Folded corner -->
+    <!-- Folded corner triangle (light blue) -->
     <path
         android:fillColor="#B3D1F7"
         android:pathData="M68,18 L80,30 L68,30 Z"/>
 
-    <!-- PDF label background -->
-    <rect
-        android:x="34"
-        android:y="36"
-        android:width="28"
-        android:height="14"
+    <!-- PDF label background (red rectangle via path) -->
+    <path
         android:fillColor="#DC3232"
-        android:rx="2"/>
+        android:pathData="M34,36 L62,36 L62,50 L34,50 Z"/>
 
-    <!-- PDF text (simplified as white rect) -->
-    <rect
-        android:x="36"
-        android:y="39"
-        android:width="24"
-        android:height="3"
-        android:fillColor="#FFFFFF"/>
-    <rect
-        android:x="36"
-        android:y="44"
-        android:width="16"
-        android:height="3"
-        android:fillColor="#FFFFFF"/>
+    <!-- White line 1 in label -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,39 L60,39 L60,42 L36,42 Z"/>
 
-    <!-- Document lines -->
-    <rect android:x="34" android:y="58" android:width="40" android:height="4" android:fillColor="#BBCCEE"/>
-    <rect android:x="34" android:y="67" android:width="36" android:height="4" android:fillColor="#BBCCEE"/>
-    <rect android:x="34" android:y="76" android:width="28" android:height="4" android:fillColor="#BBCCEE"/>
+    <!-- White line 2 in label -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,44 L52,44 L52,47 L36,47 Z"/>
+
+    <!-- Document line 1 -->
+    <path
+        android:fillColor="#BBCCEE"
+        android:pathData="M34,58 L74,58 L74,62 L34,62 Z"/>
+
+    <!-- Document line 2 -->
+    <path
+        android:fillColor="#BBCCEE"
+        android:pathData="M34,67 L70,67 L70,71 L34,71 Z"/>
+
+    <!-- Document line 3 -->
+    <path
+        android:fillColor="#BBCCEE"
+        android:pathData="M34,76 L62,76 L62,80 L34,80 Z"/>
 </vector>
