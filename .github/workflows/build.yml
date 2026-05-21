@@ -33,7 +33,11 @@ jobs:
           cache: true
 
       - name: Accept Android SDK licenses
-        run: yes | flutter doctor --android-licenses 2>/dev/null || true
+        run: |
+          yes | flutter doctor --android-licenses 2>/dev/null || true
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+          echo "SDK Root: $ANDROID_SDK_ROOT"
+          ls $ANDROID_SDK_ROOT/ndk/ 2>/dev/null || echo "No NDK folder found"
 
       - name: Flutter doctor (diagnostics)
         run: flutter doctor -v
