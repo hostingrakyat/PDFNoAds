@@ -12,6 +12,12 @@ allprojects {
     configurations.all {
         resolutionStrategy.cacheChangingModulesFor 365, 'days'
         resolutionStrategy.cacheDynamicVersionsFor 365, 'days'
+
+        // Pin androidx.core to a version compatible with compileSdk 34 + AGP 8.1.4.
+        // Newer transitive versions (1.16.x) require compileSdk 35 and AGP 8.6+,
+        // which would force a full toolchain upgrade.
+        resolutionStrategy.force 'androidx.core:core:1.13.1'
+        resolutionStrategy.force 'androidx.core:core-ktx:1.13.1'
     }
 }
 
