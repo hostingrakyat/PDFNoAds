@@ -57,13 +57,24 @@ jobs:
 
       - name: Build release APK (verbose)
         run: |
-          flutter build apk --release --no-pub --verbose 2>&1 | tee /tmp/build.log
+          flutter build apk --release --verbose 2>&1 | tee /tmp/build.log
           EXIT=${PIPESTATUS[0]}
           if [ $EXIT -ne 0 ]; then
-            echo "========== BUILD FAILED — last 150 lines =========="
-            grep -E "error:|Error:|FAILURE|Exception|> Task|Caused by:" /tmp/build.log | tail -50
-            echo "============================================"
-            tail -80 /tmp/build.log
+            echo ""
+            echo "========================================================"
+            echo "========== FAILED: lines around '> Task' failures =========="
+            echo "========================================================"
+            grep -B 2 -A 30 "FAILED\|^> Task.*FAILED" /tmp/build.log | head -200
+            echo ""
+            echo "========================================================"
+            echo "========== FAILED: any Dart compile errors =========="
+            echo "========================================================"
+            grep -B 2 -A 5 "^lib/\|Error: \|error: " /tmp/build.log | head -100
+            echo ""
+            echo "========================================================"
+            echo "========== Last 200 lines of full log =========="
+            echo "========================================================"
+            tail -200 /tmp/build.log
             exit $EXIT
           fi
 
