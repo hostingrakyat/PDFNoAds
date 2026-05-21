@@ -29,8 +29,10 @@ class PDFNoAdsApp extends StatefulWidget {
     required this.showSplash,
   });
 
-  static _PDFNoAdsAppState? of(BuildContext context) =>
-      context.findAncestorStateOfType<_PDFNoAdsAppState>();
+  static void setLocale(BuildContext context, String locale) {
+    final state = context.findAncestorStateOfType<_PDFNoAdsAppState>();
+    state?.setLocale(locale);
+  }
 
   @override
   State<PDFNoAdsApp> createState() => _PDFNoAdsAppState();

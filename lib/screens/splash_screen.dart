@@ -44,8 +44,8 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _continue() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('locale', _selectedLocale);
-    PDFNoAdsApp.of(context)?.setLocale(_selectedLocale);
     if (!mounted) return;
+    PDFNoAdsApp.setLocale(context, _selectedLocale);
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => HomeScreen(locale: _selectedLocale),
