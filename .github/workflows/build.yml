@@ -35,8 +35,14 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Create local.properties
+        run: |
+          echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" > android/local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
+          cat android/local.properties
+
       - name: Build release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --no-pub
 
       - name: Rename APK
         run: |
