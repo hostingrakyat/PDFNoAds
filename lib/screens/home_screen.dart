@@ -76,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
-        final path = file.path ?? (file.uri != null ? file.uri.toString() : null);
+        final path = file.path ?? file.identifier;
         if (path != null) {
           await _saveRecent(path);
           if (mounted) _navigateToPdf(path);
