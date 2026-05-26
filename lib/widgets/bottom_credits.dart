@@ -12,10 +12,9 @@ class BottomCredits extends StatelessWidget {
   });
 
   Future<void> _launch(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {}
   }
 
   @override
@@ -62,7 +61,7 @@ class BottomCredits extends StatelessWidget {
                 icon: Icons.play_circle_outline,
                 label: 'YouTube',
                 color: iconColor,
-                onTap: () => _launch('https://www.youtube.com/@ir.riovansroring'),
+                onTap: () => _launch('https://youtube.com/@ir.riovanroring'),
               ),
             ],
           ),

@@ -98,113 +98,122 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
     return Scaffold(
       backgroundColor: _nightMode ? const Color(0xFF121212) : cs.surface,
-      body: GestureDetector(
-        onTap: _toggleUi,
-        child: Stack(
-          children: [
-            // PDF View
-            if (_error != null)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline_rounded,
-                          size: 56, color: cs.error),
-                      const SizedBox(height: 16),
-                      Text(
-                        widget.locale == 'id'
-                            ? 'Gagal membuka file'
-                            : 'Failed to open file',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: cs.error,
-                          fontWeight: FontWeight.w600,
+      body: Stack(
+        children: [
+          // GestureDetector only covers the PDF area so bar buttons stay tappable
+          GestureDetector(
+            onTap: _toggleUi,
+            behavior: HitTestBehavior.opaque,
+            child: SizedBox.expand(
+              child: _error != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.error_outline_rounded,
+                                size: 56, color: cs.error),
+                            const SizedBox(height: 16),
+                            Text(
+                              widget.locale == 'id'
+                                  ? 'Gagal membuka file'
+                                  : 'Failed to open file',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: cs.error,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _error!,
+                              style:
+                                  TextStyle(fontSize: 12, color: cs.outline),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 24),
+                            FilledButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Back'),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _error!,
-                        style: TextStyle(fontSize: 12, color: cs.outline),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Back'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else if (_localPath != null)
-              PDFView(
-                filePath: _localPath!,
-                nightMode: _nightMode,
-                enableSwipe: true,
-                swipeHorizontal: false,
-                autoSpacing: true,
-                pageFling: true,
-                onRender: (pages) {
-                  setState(() {
-                    _totalPages = pages ?? 0;
-                    _isLoading = false;
-                  });
-                },
-                onViewCreated: (ctrl) => _pdfController = ctrl,
-                onPageChanged: (page, total) {
-                  setState(() {
-                    _currentPage = page ?? 0;
-                    _totalPages = total ?? 0;
-                  });
-                },
-                onError: (e) => setState(() => _error = e.toString()),
-              )
-            else
-              const Center(child: CircularProgressIndicator()),
+                    )
+                  : _localPath != null
+                      ? PDFView(
+                          filePath: _localPath!,
+                          nightMode: _nightMode,
+                          enableSwipe: true,
+                          swipeHorizontal: false,
+                          autoSpacing: true,
+                          pageFling: true,
+                          defaultPage: 0,
+                          onRender: (pages) {
+                            setState(() {
+                              _totalPages = pages ?? 0;
+                              _isLoading = false;
+                            });
+                            // flutter_pdfview shows blank until a setPage call
+                            // triggers the native view to paint the first page.
+                            Future.microtask(
+                                () => _pdfController?.setPage(0));
+                          },
+                          onViewCreated: (ctrl) => _pdfController = ctrl,
+                          onPageChanged: (page, total) {
+                            setState(() {
+                              _currentPage = page ?? 0;
+                              _totalPages = total ?? 0;
+                            });
+                          },
+                          onError: (e) =>
+                              setState(() => _error = e.toString()),
+                        )
+                      : const Center(child: CircularProgressIndicator()),
+            ),
+          ),
 
-            // Loading overlay
-            if (_isLoading && _localPath != null && _error == null)
-              const Center(child: CircularProgressIndicator()),
+          // Loading overlay
+          if (_isLoading && _localPath != null && _error == null)
+            const Center(child: CircularProgressIndicator()),
 
-            // Top AppBar (slides in/out)
+          // Top AppBar (slides in/out)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            top: _showUi ? 0 : -120,
+            left: 0,
+            right: 0,
+            child: _TopBar(
+              name: _displayName,
+              nightMode: _nightMode,
+              locale: widget.locale,
+              onBack: () => Navigator.pop(context),
+              onNightMode: () => setState(() => _nightMode = !_nightMode),
+              onSetDefault: _showSetDefault,
+            ),
+          ),
+
+          // Bottom page bar (slides in/out)
+          if (_totalPages > 0)
             AnimatedPositioned(
               duration: const Duration(milliseconds: 200),
-              top: _showUi ? 0 : -120,
+              bottom: _showUi ? 0 : -120,
               left: 0,
               right: 0,
-              child: _TopBar(
-                name: _displayName,
-                nightMode: _nightMode,
+              child: _BottomPageBar(
+                currentPage: _currentPage,
+                totalPages: _totalPages,
                 locale: widget.locale,
-                onBack: () => Navigator.pop(context),
-                onNightMode: () => setState(() => _nightMode = !_nightMode),
-                onSetDefault: _showSetDefault,
-              ),
-            ),
-
-            // Bottom page bar (slides in/out)
-            if (_totalPages > 0)
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 200),
-                bottom: _showUi ? 0 : -120,
-                left: 0,
-                right: 0,
-                child: _BottomPageBar(
-                  currentPage: _currentPage,
-                  totalPages: _totalPages,
+                onPrev: _prevPage,
+                onNext: _nextPage,
+                credits: BottomCredits(
                   locale: widget.locale,
-                  onPrev: _prevPage,
-                  onNext: _nextPage,
-                  credits: BottomCredits(
-                    locale: widget.locale,
-                    dark: _nightMode,
-                  ),
+                  dark: _nightMode,
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
