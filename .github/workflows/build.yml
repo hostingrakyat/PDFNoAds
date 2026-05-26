@@ -81,14 +81,14 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk dist/PDFNoAds-v1.0.0.apk
+          cp build/app/outputs/flutter-apk/app-release.apk dist/PDFNoAds-v1.0.1.apk
           ls -lh dist/
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
           name: PDFNoAds-APK
-          path: dist/PDFNoAds-v1.0.0.apk
+          path: dist/PDFNoAds-v1.0.1.apk
           retention-days: 90
 
       - name: Upload build log on failure
@@ -101,25 +101,31 @@ jobs:
 
       - name: Delete existing release if present
         run: |
-          gh release delete v1.0.0 --yes 2>/dev/null || true
-          git push --delete origin v1.0.0 2>/dev/null || true
+          gh release delete v1.0.1 --yes 2>/dev/null || true
+          git push --delete origin v1.0.1 2>/dev/null || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: "PDF No Ads v1.0.0 — Free PDF Reader"
+          tag_name: v1.0.1
+          name: "PDF No Ads v1.0.1 — Free PDF Reader"
           body: |
             ## PDF No Ads — Free PDF Reader, No Ads, Forever
 
             **Day 1 of 365 Days App Challenge by Ir. Riovan Styx Roring**
 
             ### Install
-            1. Download `PDFNoAds-v1.0.0.apk` below
+            1. Download `PDFNoAds-v1.0.1.apk` below
             2. On your Android phone: Settings → Security → Allow unknown sources
             3. Open the downloaded APK and install
+
+            ### What's new in v1.0.1
+            - 🐛 Fixed blank white page when opening PDFs
+            - ✨ Added animated loading screen while PDF opens
+            - 🔗 Fixed social media links not opening
+            - 🔗 Fixed YouTube link
 
             ### Features
             - 📄 Open & read any PDF file
@@ -130,8 +136,8 @@ jobs:
 
             ---
             Created by: **Ir. Riovan Styx Roring**
-            📱 [TikTok](https://www.tiktok.com/@ir.riovansroring) · [Instagram](https://www.instagram.com/ir.riovansroring/) · [YouTube](https://www.youtube.com/@ir.riovansroring)
-          files: dist/PDFNoAds-v1.0.0.apk
+            📱 [TikTok](https://www.tiktok.com/@ir.riovansroring) · [Instagram](https://www.instagram.com/ir.riovansroring/) · [YouTube](https://youtube.com/@ir.riovanroring)
+          files: dist/PDFNoAds-v1.0.1.apk
           draft: false
           prerelease: false
         env:

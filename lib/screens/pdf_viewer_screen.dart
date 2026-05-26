@@ -31,19 +31,23 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   String? _localPath;
   String? _error;
 
+  // Guards against the race between onViewCreated and onRender:
+  // whichever fires second calls _finishLoading.
+  bool _rendered = false;
+  bool _loadingFinished = false;
+
   @override
   void initState() {
     super.initState();
     _prepareFile();
   }
 
-  /// For content:// URIs we must copy the file to a local temp path first.
   Future<void> _prepareFile() async {
     final path = widget.filePath;
     if (path.startsWith('content://')) {
       try {
-        final bytes =
-            await _intentChannel.invokeMethod<Uint8List>('readUri', {'uri': path});
+        final bytes = await _intentChannel
+            .invokeMethod<Uint8List>('readUri', {'uri': path});
         if (bytes == null) throw Exception('Could not read file');
         final dir = await getTemporaryDirectory();
         final name = _extractName(path);
@@ -54,11 +58,22 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         if (mounted) setState(() => _error = e.toString());
       }
     } else {
-      final resolved = path.startsWith('file://')
-          ? Uri.parse(path).toFilePath()
-          : path;
+      final resolved =
+          path.startsWith('file://') ? Uri.parse(path).toFilePath() : path;
       setState(() => _localPath = resolved);
     }
+  }
+
+  // Called once both the controller and the rendered page count are available.
+  // Keeps the loading overlay up until setPage(0) has had time to paint.
+  Future<void> _finishLoading(PDFViewController ctrl, int pages) async {
+    if (_loadingFinished || !mounted) return;
+    _loadingFinished = true;
+    setState(() => _totalPages = pages);
+    await ctrl.setPage(0);
+    // Brief pause so the native renderer paints before we remove the overlay.
+    await Future.delayed(const Duration(milliseconds: 350));
+    if (mounted) setState(() => _isLoading = false);
   }
 
   String _extractName(String path) {
@@ -74,9 +89,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   void _toggleUi() => setState(() => _showUi = !_showUi);
 
   void _prevPage() {
-    if (_currentPage > 0) {
-      _pdfController?.setPage(_currentPage - 1);
-    }
+    if (_currentPage > 0) _pdfController?.setPage(_currentPage - 1);
   }
 
   void _nextPage() {
@@ -100,7 +113,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       backgroundColor: _nightMode ? const Color(0xFF121212) : cs.surface,
       body: Stack(
         children: [
-          // GestureDetector only covers the PDF area so bar buttons stay tappable
+          // GestureDetector only over the PDF area so bar buttons stay tappable
           GestureDetector(
             onTap: _toggleUi,
             behavior: HitTestBehavior.opaque,
@@ -150,33 +163,41 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                           autoSpacing: true,
                           pageFling: true,
                           defaultPage: 0,
-                          onRender: (pages) {
-                            setState(() {
-                              _totalPages = pages ?? 0;
-                              _isLoading = false;
-                            });
-                            // flutter_pdfview shows blank until a setPage call
-                            // triggers the native view to paint the first page.
-                            Future.microtask(
-                                () => _pdfController?.setPage(0));
+                          onViewCreated: (ctrl) {
+                            _pdfController = ctrl;
+                            // If onRender already fired before the view was ready
+                            if (_rendered) _finishLoading(ctrl, _totalPages);
                           },
-                          onViewCreated: (ctrl) => _pdfController = ctrl,
+                          onRender: (pages) {
+                            _rendered = true;
+                            final ctrl = _pdfController;
+                            if (ctrl != null) {
+                              _finishLoading(ctrl, pages ?? 0);
+                            } else {
+                              // onViewCreated hasn't fired yet; store page count
+                              // so onViewCreated can call _finishLoading.
+                              _totalPages = pages ?? 0;
+                            }
+                          },
                           onPageChanged: (page, total) {
                             setState(() {
                               _currentPage = page ?? 0;
-                              _totalPages = total ?? 0;
+                              _totalPages = total ?? _totalPages;
                             });
                           },
                           onError: (e) =>
                               setState(() => _error = e.toString()),
                         )
-                      : const Center(child: CircularProgressIndicator()),
+                      : const SizedBox.expand(),
             ),
           ),
 
-          // Loading overlay
-          if (_isLoading && _localPath != null && _error == null)
-            const Center(child: CircularProgressIndicator()),
+          // Full-screen loading overlay — stays up until the native view paints
+          if (_isLoading && _error == null)
+            _PdfLoadingOverlay(
+              locale: widget.locale,
+              nightMode: _nightMode,
+            ),
 
           // Top AppBar (slides in/out)
           AnimatedPositioned(
@@ -195,7 +216,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           ),
 
           // Bottom page bar (slides in/out)
-          if (_totalPages > 0)
+          if (_totalPages > 0 && !_isLoading)
             AnimatedPositioned(
               duration: const Duration(milliseconds: 200),
               bottom: _showUi ? 0 : -120,
@@ -218,6 +239,97 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     );
   }
 }
+
+// ─── Loading overlay ──────────────────────────────────────────────────────────
+
+class _PdfLoadingOverlay extends StatefulWidget {
+  final String locale;
+  final bool nightMode;
+
+  const _PdfLoadingOverlay({required this.locale, required this.nightMode});
+
+  @override
+  State<_PdfLoadingOverlay> createState() => _PdfLoadingOverlayState();
+}
+
+class _PdfLoadingOverlayState extends State<_PdfLoadingOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(begin: 0.88, end: 1.0).animate(
+      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bg = widget.nightMode ? const Color(0xFF121212) : cs.surface;
+
+    return Container(
+      color: bg,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ScaleTransition(
+              scale: _scale,
+              child: Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Icon(
+                  Icons.picture_as_pdf_rounded,
+                  size: 48,
+                  color: cs.onPrimaryContainer,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: cs.primary,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              widget.locale == 'id' ? 'Membuka PDF…' : 'Opening PDF…',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: widget.nightMode
+                    ? Colors.white70
+                    : cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Top bar ──────────────────────────────────────────────────────────────────
 
 class _TopBar extends StatelessWidget {
   final String name;
@@ -257,10 +369,8 @@ class _TopBar extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
-              icon: Icon(
-                Icons.arrow_back_rounded,
-                color: nightMode ? Colors.white : cs.onSurface,
-              ),
+              icon: Icon(Icons.arrow_back_rounded,
+                  color: nightMode ? Colors.white : cs.onSurface),
               onPressed: onBack,
             ),
             Expanded(
@@ -277,21 +387,16 @@ class _TopBar extends StatelessWidget {
             ),
             IconButton(
               icon: Icon(
-                nightMode
-                    ? Icons.light_mode_rounded
-                    : Icons.dark_mode_rounded,
+                nightMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                 color: nightMode ? Colors.white : cs.onSurface,
               ),
               onPressed: onNightMode,
             ),
             IconButton(
-              icon: Icon(
-                Icons.open_in_new_rounded,
-                color: nightMode ? Colors.white : cs.onSurface,
-              ),
-              tooltip: locale == 'id'
-                  ? 'Jadikan Default'
-                  : 'Set as Default',
+              icon: Icon(Icons.open_in_new_rounded,
+                  color: nightMode ? Colors.white : cs.onSurface),
+              tooltip:
+                  locale == 'id' ? 'Jadikan Default' : 'Set as Default',
               onPressed: onSetDefault,
             ),
           ],
@@ -300,6 +405,8 @@ class _TopBar extends StatelessWidget {
     );
   }
 }
+
+// ─── Bottom page bar ──────────────────────────────────────────────────────────
 
 class _BottomPageBar extends StatelessWidget {
   final int currentPage;
@@ -338,7 +445,8 @@ class _BottomPageBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -346,8 +454,7 @@ class _BottomPageBar extends StatelessWidget {
                     icon: const Icon(Icons.chevron_left_rounded),
                     onPressed: currentPage > 0 ? onPrev : null,
                     style: IconButton.styleFrom(
-                      backgroundColor: cs.surfaceContainerHigh,
-                    ),
+                        backgroundColor: cs.surfaceContainerHigh),
                   ),
                   const SizedBox(width: 16),
                   Text(
@@ -361,10 +468,10 @@ class _BottomPageBar extends StatelessWidget {
                   const SizedBox(width: 16),
                   IconButton(
                     icon: const Icon(Icons.chevron_right_rounded),
-                    onPressed: currentPage < totalPages - 1 ? onNext : null,
+                    onPressed:
+                        currentPage < totalPages - 1 ? onNext : null,
                     style: IconButton.styleFrom(
-                      backgroundColor: cs.surfaceContainerHigh,
-                    ),
+                        backgroundColor: cs.surfaceContainerHigh),
                   ),
                 ],
               ),
@@ -376,6 +483,8 @@ class _BottomPageBar extends StatelessWidget {
     );
   }
 }
+
+// ─── Set-as-default sheet ─────────────────────────────────────────────────────
 
 class _SetDefaultSheet extends StatelessWidget {
   final String locale;
@@ -436,7 +545,8 @@ class _SetDefaultSheet extends StatelessWidget {
                 ch.invokeMethod('openDefaultApps').catchError((_) {});
               },
               icon: const Icon(Icons.settings_rounded),
-              label: Text(locale == 'id' ? 'Buka Pengaturan' : 'Open Settings'),
+              label: Text(
+                  locale == 'id' ? 'Buka Pengaturan' : 'Open Settings'),
             ),
           ),
           const SizedBox(height: 12),

@@ -477,7 +477,7 @@ class _AboutSheet extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'v1.0.0',
+            'v1.0.1',
             style: TextStyle(color: cs.outline, fontSize: 13),
           ),
           const SizedBox(height: 16),
