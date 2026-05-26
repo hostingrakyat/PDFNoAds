@@ -4,15 +4,6 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
-// Force androidx.core to a version compatible with compileSdk 34 + AGP 8.1.4.
-// core:1.16.x (pulled transitively) requires compileSdk 35 and AGP 8.6+.
-configurations.all {
-    resolutionStrategy {
-        force 'androidx.core:core:1.13.1'
-        force 'androidx.core:core-ktx:1.13.1'
-    }
-}
-
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {
@@ -24,7 +15,7 @@ def flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "
 
 android {
     namespace "com.pdfnoads.app"
-    compileSdk flutter.compileSdkVersion
+    compileSdk 35
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -42,7 +33,7 @@ android {
     defaultConfig {
         applicationId "com.pdfnoads.app"
         minSdk 21
-        targetSdk flutter.targetSdkVersion
+        targetSdk 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true

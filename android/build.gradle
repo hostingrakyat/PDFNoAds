@@ -1,28 +1,7 @@
 allprojects {
     repositories {
-        // SE Asia / Indonesia fast mirrors — Alibaba Cloud CDN
-        maven { url 'https://maven.aliyun.com/repository/google' }
-        maven { url 'https://maven.aliyun.com/repository/central' }
-        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
         google()
         mavenCentral()
-    }
-
-    // Aggressive caching — avoids re-downloading on slow connections
-    configurations.all {
-        resolutionStrategy.cacheChangingModulesFor 365, 'days'
-        resolutionStrategy.cacheDynamicVersionsFor 365, 'days'
-
-        // Pin androidx.core to a version compatible with compileSdk 34 + AGP 8.1.4.
-        // core:1.16.x (pulled transitively) requires compileSdk 35 and AGP 8.6+.
-        resolutionStrategy.force 'androidx.core:core:1.13.1'
-        resolutionStrategy.force 'androidx.core:core-ktx:1.13.1'
-        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-            if (details.requested.group == 'androidx.core') {
-                details.useVersion '1.13.1'
-                details.because 'Force version compatible with compileSdk 34 + AGP 8.1.4'
-            }
-        }
     }
 }
 
