@@ -13,6 +13,11 @@ if (localPropertiesFile.exists()) {
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode") ?: "1"
 def flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "1.0"
 
+// upload-key.jks is decoded by CI from the KEYSTORE_BASE64 secret.
+// When the file is absent (local dev / no secrets), fall back to debug signing.
+def keystoreFile = file("upload-key.jks")
+def hasKeystore  = keystoreFile.exists()
+
 android {
     namespace "com.pdfnoads.app"
     compileSdk 35
@@ -30,6 +35,24 @@ android {
         main.java.srcDirs += "src/main/kotlin"
     }
 
+    signingConfigs {
+        release {
+            if (hasKeystore) {
+                storeFile     keystoreFile
+                storePassword System.getenv("STORE_PASSWORD") ?: ""
+                keyAlias      System.getenv("KEY_ALIAS")      ?: ""
+                keyPassword   System.getenv("KEY_PASSWORD")   ?: ""
+            } else {
+                // Local / no-secret builds stay signed with the debug key
+                def debugKs = file("${System.getProperty('user.home')}/.android/debug.keystore")
+                storeFile     debugKs.exists() ? debugKs : null
+                storePassword "android"
+                keyAlias      "androiddebugkey"
+                keyPassword   "android"
+            }
+        }
+    }
+
     defaultConfig {
         applicationId "com.pdfnoads.app"
         minSdk 21
@@ -41,7 +64,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled false
             shrinkResources false
         }

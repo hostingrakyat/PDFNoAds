@@ -1,4 +1,4 @@
-name: Build & Release APK
+name: Build & Release APK + AAB
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Flutter APK
+    name: Build Flutter APK + AAB
     runs-on: ubuntu-latest
 
     steps:
@@ -36,11 +36,6 @@ jobs:
         run: |
           yes | flutter doctor --android-licenses 2>/dev/null || true
           yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
-          echo "SDK Root: $ANDROID_SDK_ROOT"
-          ls $ANDROID_SDK_ROOT/ndk/ 2>/dev/null || echo "No NDK folder found"
-
-      - name: Flutter doctor (diagnostics)
-        run: flutter doctor -v
 
       - name: Flutter pub get
         run: flutter pub get
@@ -50,45 +45,53 @@ jobs:
           FLUTTER_SDK=$(which flutter | sed 's|/bin/flutter||')
           echo "flutter.sdk=$FLUTTER_SDK" > android/local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
-          echo "--- local.properties ---"
-          cat android/local.properties
-          echo "--- Flutter SDK exists ---"
-          ls "$FLUTTER_SDK/packages/flutter_tools/gradle/" | head -10
 
-      - name: Build release APK (verbose)
+      - name: Decode keystore (if secret is set)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          flutter build apk --release --verbose 2>&1 | tee /tmp/build.log
-          EXIT=${PIPESTATUS[0]}
-          if [ $EXIT -ne 0 ]; then
-            echo ""
-            echo "========================================================"
-            echo "========== FAILED: lines around '> Task' failures =========="
-            echo "========================================================"
-            grep -B 2 -A 30 "FAILED\|^> Task.*FAILED" /tmp/build.log | head -200
-            echo ""
-            echo "========================================================"
-            echo "========== FAILED: any Dart compile errors =========="
-            echo "========================================================"
-            grep -B 2 -A 5 "^lib/\|Error: \|error: " /tmp/build.log | head -100
-            echo ""
-            echo "========================================================"
-            echo "========== Last 200 lines of full log =========="
-            echo "========================================================"
-            tail -200 /tmp/build.log
-            exit $EXIT
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-key.jks
+            echo "✅ Keystore decoded — release signing enabled"
+          else
+            echo "ℹ️  No KEYSTORE_BASE64 secret — using debug signing"
           fi
 
-      - name: Rename APK
+      - name: Build release APK
+        run: flutter build apk --release --verbose 2>&1 | tee /tmp/build.log; EXIT=${PIPESTATUS[0]}; [ $EXIT -eq 0 ] || { tail -200 /tmp/build.log; exit $EXIT; }
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS:      ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD:   ${{ secrets.KEY_PASSWORD }}
+
+      - name: Build release AAB (Play Store)
+        run: flutter build appbundle --release 2>&1 | tee -a /tmp/build.log; EXIT=${PIPESTATUS[0]}; [ $EXIT -eq 0 ] || { tail -200 /tmp/build.log; exit $EXIT; }
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS:      ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD:   ${{ secrets.KEY_PASSWORD }}
+
+      - name: Collect artifacts
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk dist/PDFNoAds-v1.0.1.apk
+          cp build/app/outputs/flutter-apk/app-release.apk   dist/PDFNoAds-v1.0.1.apk
+          cp build/app/outputs/bundle/release/app-release.aab dist/PDFNoAds-v1.0.1.aab
           ls -lh dist/
 
-      - name: Upload APK as artifact
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: PDFNoAds-APK
           path: dist/PDFNoAds-v1.0.1.apk
+          retention-days: 90
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFNoAds-AAB
+          path: dist/PDFNoAds-v1.0.1.aab
           retention-days: 90
 
       - name: Upload build log on failure
@@ -106,7 +109,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create GitHub Release with APK
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.1
@@ -116,14 +119,17 @@ jobs:
 
             **Day 1 of 365 Days App Challenge by Ir. Riovan Styx Roring**
 
-            ### Install
+            ### Install (APK — direct sideload)
             1. Download `PDFNoAds-v1.0.1.apk` below
             2. On your Android phone: Settings → Security → Allow unknown sources
             3. Open the downloaded APK and install
 
+            ### Play Store (AAB)
+            Upload `PDFNoAds-v1.0.1.aab` to Google Play Console.
+
             ### What's new in v1.0.1
             - 🐛 Fixed blank white page when opening PDFs
-            - ✨ Added animated loading screen while PDF opens
+            - ✨ Animated loading screen while PDF opens
             - 🔗 Fixed social media links not opening
             - 🔗 Fixed YouTube link
 
@@ -137,7 +143,9 @@ jobs:
             ---
             Created by: **Ir. Riovan Styx Roring**
             📱 [TikTok](https://www.tiktok.com/@ir.riovansroring) · [Instagram](https://www.instagram.com/ir.riovansroring/) · [YouTube](https://youtube.com/@ir.riovanroring)
-          files: dist/PDFNoAds-v1.0.1.apk
+          files: |
+            dist/PDFNoAds-v1.0.1.apk
+            dist/PDFNoAds-v1.0.1.aab
           draft: false
           prerelease: false
         env:
