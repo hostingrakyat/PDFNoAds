@@ -49,6 +49,9 @@ android/.gradle/
 # Flutter-generated plugin registrant (auto-generated on flutter pub get)
 android/app/src/main/java/
 
+# Local properties (contains machine-specific paths)
+**/android/local.properties
+
 # Signing keystores — never commit these
 android/app/*.jks
 android/app/*.keystore
