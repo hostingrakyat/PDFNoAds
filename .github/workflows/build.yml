@@ -47,6 +47,20 @@ jobs:
           echo "flutter.sdk=$FLUTTER_SDK" > android/local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
 
+      # The Gradle wrapper download has a short (10s) timeout that occasionally
+      # flakes on the runner. Pre-fetch it with retries so the build step never
+      # fails on a transient network hiccup.
+      - name: Warm up Gradle wrapper (retry on flaky download)
+        working-directory: android
+        run: |
+          for i in 1 2 3 4 5; do
+            ./gradlew --version && exit 0
+            echo "Gradle wrapper download attempt $i failed; retrying in $((i*5))s..."
+            sleep $((i * 5))
+          done
+          echo "Gradle wrapper download still failing after retries" >&2
+          exit 1
+
       - name: Decode keystore (if secret is set)
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
