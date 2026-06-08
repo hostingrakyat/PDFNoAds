@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - claude/flutter-pdf-reader-app-qwd5Q
+      - claude/pdf-viewer-bugs-features-thrwa
       - main
   workflow_dispatch:
 
@@ -103,6 +104,7 @@ jobs:
           retention-days: 7
 
       - name: Delete existing release if present
+        if: github.ref == 'refs/heads/main'
         run: |
           gh release delete v1.0.1 --yes 2>/dev/null || true
           git push --delete origin v1.0.1 2>/dev/null || true
@@ -110,6 +112,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.1
@@ -148,5 +151,28 @@ jobs:
             dist/PDFNoAds-v1.0.1.aab
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Test builds from feature branches: publish a prerelease with a direct
+      # APK download link, without touching the stable v1.0.1 release.
+      - name: Publish test build
+        if: github.ref != 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: test-build
+          name: "🧪 Test build (latest from feature branch)"
+          body: |
+            Unstable test build for on-device testing — **not** the public release.
+
+            Download `PDFNoAds-v1.0.1.apk` below, then on your phone:
+            Settings → Security → Allow unknown sources → open the APK to install.
+
+            Built from `${{ github.ref_name }}` @ `${{ github.sha }}`.
+          files: |
+            dist/PDFNoAds-v1.0.1.apk
+            dist/PDFNoAds-v1.0.1.aab
+          draft: false
+          prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
