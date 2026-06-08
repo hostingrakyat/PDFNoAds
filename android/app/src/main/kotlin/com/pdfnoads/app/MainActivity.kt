@@ -4,11 +4,14 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 class MainActivity : FlutterActivity() {
     companion object {
@@ -51,6 +54,28 @@ class MainActivity : FlutterActivity() {
                             result.error("READ_ERROR", e.message, null)
                         }
                     }
+                    "getDisplayName" -> {
+                        val uriStr = call.argument<String>("uri")
+                        if (uriStr == null) {
+                            result.error("INVALID", "No URI provided", null)
+                            return@setMethodCallHandler
+                        }
+                        result.success(resolveDisplayName(Uri.parse(uriStr)))
+                    }
+                    "shareFile" -> {
+                        val path = call.argument<String>("path")
+                        val name = call.argument<String>("name")
+                        if (path == null) {
+                            result.error("INVALID", "No path provided", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            shareFile(path, name)
+                            result.success(null)
+                        } catch (e: Exception) {
+                            result.error("SHARE_ERROR", e.message, null)
+                        }
+                    }
                     "openDefaultApps" -> {
                         openDefaultAppsSettings()
                         result.success(null)
@@ -77,6 +102,44 @@ class MainActivity : FlutterActivity() {
         if (uri != null) {
             pendingUri = uri.toString()
         }
+    }
+
+    /** Resolves the human-readable file name for a content:// URI, or null. */
+    private fun resolveDisplayName(uri: Uri): String? {
+        if (uri.scheme == "content") {
+            try {
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0 && cursor.moveToFirst()) {
+                        val name = cursor.getString(idx)
+                        if (!name.isNullOrBlank()) return name
+                    }
+                }
+            } catch (_: Exception) {
+                // Fall through to last-path-segment below.
+            }
+        }
+        return uri.lastPathSegment
+    }
+
+    /** Shares a local file via the system share sheet using FileProvider. */
+    private fun shareFile(path: String, name: String?) {
+        val file = File(path)
+        val uri = FileProvider.getUriForFile(
+            this,
+            "$packageName.fileprovider",
+            file,
+        )
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            if (!name.isNullOrBlank()) putExtra(Intent.EXTRA_TITLE, name)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(send, name).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(chooser)
     }
 
     private fun readUriBytes(uri: Uri): ByteArray {

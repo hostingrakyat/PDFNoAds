@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path/path.dart' as p;
+import '../services/intent_service.dart';
+import '../services/recent_files.dart';
 import '../widgets/bottom_credits.dart';
 import '../l10n/strings.dart';
 import 'pdf_viewer_screen.dart';
@@ -18,9 +16,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const _intentChannel = MethodChannel('com.pdfnoads.app/intent');
   late AppStrings _s;
-  List<String> _recentFiles = [];
+  List<RecentFile> _recentFiles = [];
   bool _loading = false;
 
   @override
@@ -28,43 +25,11 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _s = AppStrings(widget.locale);
     _loadRecent();
-    _checkIncomingIntent();
-  }
-
-  Future<void> _checkIncomingIntent() async {
-    try {
-      final uri = await _intentChannel.invokeMethod<String>('getInitialUri');
-      if (uri != null && mounted) {
-        _openFromUri(uri);
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _openFromUri(String uri) async {
-    await _saveRecent(uri);
-    if (!mounted) return;
-    _navigateToPdf(uri);
   }
 
   Future<void> _loadRecent() async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('recent_files') ?? [];
-    // Filter to only existing files
-    final valid = list.where((f) {
-      if (f.startsWith('content://') || f.startsWith('file://')) return true;
-      return File(f).existsSync();
-    }).toList();
-    if (mounted) setState(() => _recentFiles = valid);
-  }
-
-  Future<void> _saveRecent(String path) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('recent_files') ?? [];
-    list.remove(path);
-    list.insert(0, path);
-    if (list.length > 20) list.removeLast();
-    await prefs.setStringList('recent_files', list);
-    if (mounted) setState(() => _recentFiles = list);
+    final files = await RecentFiles.load();
+    if (mounted) setState(() => _recentFiles = files);
   }
 
   Future<void> _pickFile() async {
@@ -77,39 +42,27 @@ class _HomeScreenState extends State<HomeScreen> {
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
         final path = file.path ?? file.identifier;
-        if (path != null) {
-          await _saveRecent(path);
-          if (mounted) _navigateToPdf(path);
-        }
+        if (path != null && mounted) _navigateToPdf(path);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _navigateToPdf(String path) {
-    Navigator.of(context).push(
+  // The viewer resolves the file and records it in Recents, so we just reload
+  // the list when it returns.
+  Future<void> _navigateToPdf(String path) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PdfViewerScreen(filePath: path, locale: widget.locale),
       ),
     );
+    await _loadRecent();
   }
 
-  String _displayName(String path) {
-    if (path.startsWith('content://')) {
-      final decoded = Uri.decodeFull(path);
-      final parts = decoded.split('/');
-      return parts.isNotEmpty ? parts.last : path;
-    }
-    return p.basename(path);
-  }
-
-  void _removeRecent(String path) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('recent_files') ?? [];
-    list.remove(path);
-    await prefs.setStringList('recent_files', list);
-    setState(() => _recentFiles.remove(path));
+  Future<void> _removeRecent(String path) async {
+    await RecentFiles.remove(path);
+    await _loadRecent();
   }
 
   void _changeLanguage() {
@@ -149,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   behavior: SnackBarBehavior.floating,
                 ),
               );
-              _intentChannel.invokeMethod('openDefaultApps').catchError((_) {});
+              IntentService.openDefaultApps();
             },
             child: Text(_s.get('settings')),
           ),
@@ -264,9 +217,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (_recentFiles.isNotEmpty)
                     TextButton(
                       onPressed: () async {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setStringList('recent_files', []);
-                        setState(() => _recentFiles.clear());
+                        await RecentFiles.clear();
+                        await _loadRecent();
                       },
                       child: Text(
                         widget.locale == 'id' ? 'Hapus Semua' : 'Clear All',
@@ -284,16 +236,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: _recentFiles.length,
                       itemBuilder: (ctx, i) {
-                        final path = _recentFiles[i];
+                        final rf = _recentFiles[i];
                         return _RecentFileCard(
-                          name: _displayName(path),
-                          path: path,
+                          name: rf.name,
                           locale: widget.locale,
-                          onTap: () {
-                            _saveRecent(path);
-                            _navigateToPdf(path);
-                          },
-                          onDelete: () => _removeRecent(path),
+                          onTap: () => _navigateToPdf(rf.path),
+                          onDelete: () => _removeRecent(rf.path),
                         );
                       },
                     ),
@@ -352,14 +300,12 @@ class _EmptyState extends StatelessWidget {
 
 class _RecentFileCard extends StatelessWidget {
   final String name;
-  final String path;
   final String locale;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _RecentFileCard({
     required this.name,
-    required this.path,
     required this.locale,
     required this.onTap,
     required this.onDelete,
