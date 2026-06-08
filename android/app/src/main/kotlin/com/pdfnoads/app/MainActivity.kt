@@ -124,19 +124,27 @@ class MainActivity : FlutterActivity() {
 
     /** Shares a local file via the system share sheet using FileProvider. */
     private fun shareFile(path: String, name: String?) {
-        val file = File(path)
+        val source = File(path)
+        // Stage a copy inside the cache dir, which is always covered by the
+        // FileProvider paths. The original may live in the app documents dir
+        // (e.g. a file opened from another app), which FileProvider can't map.
+        val shareDir = File(cacheDir, "shared").apply { mkdirs() }
+        val shareName = if (!name.isNullOrBlank()) name else source.name
+        val shared = File(shareDir, shareName)
+        source.copyTo(shared, overwrite = true)
+
         val uri = FileProvider.getUriForFile(
             this,
             "$packageName.fileprovider",
-            file,
+            shared,
         )
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "application/pdf"
             putExtra(Intent.EXTRA_STREAM, uri)
-            if (!name.isNullOrBlank()) putExtra(Intent.EXTRA_TITLE, name)
+            putExtra(Intent.EXTRA_TITLE, shareName)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        val chooser = Intent.createChooser(send, name).apply {
+        val chooser = Intent.createChooser(send, shareName).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(chooser)
